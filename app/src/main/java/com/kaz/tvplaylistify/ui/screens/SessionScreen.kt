@@ -11,14 +11,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-
+import com.kaz.tvplaylistify.api.RetrofitInstance
 import com.kaz.tvplaylistify.service.VideoPlaybackService
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import com.kaz.tvplaylistify.api.RetrofitInstance
-import com.kaz.tvplaylistify.model.SessionResponse
-
-
+import kotlinx.coroutines.withContext
 
 @Composable
 fun SessionScreen(sessionId: String) {
@@ -29,23 +27,36 @@ fun SessionScreen(sessionId: String) {
     var owner by remember { mutableStateOf("") }
     var hosts by remember { mutableStateOf(listOf<String>()) }
     var guests by remember { mutableStateOf(listOf<String>()) }
+    var errorLoading by remember { mutableStateOf(false) }
 
-    // Llamada a la API para obtener la sesión
+    // Cargar la sesión con reintentos
     LaunchedEffect(Unit) {
         coroutineScope.launch(Dispatchers.IO) {
-            try {
-                val retrofitResponse = RetrofitInstance.api.getSession(sessionId)
-                val response = RetrofitInstance.api.getSession(sessionId)
-                if (response != null) {
-                    code = response.code.toString()
-                    owner = response.host
-                    hosts = response.hosts?.keys?.map { it } ?: listOf()
-                    guests = response.guests?.keys?.map { it } ?: listOf()
-                } else {
-                    Log.e("SessionScreen", "Respuesta vacía de getSession")
+            var success = false
+            var attempts = 0
+
+            while (!success && attempts < 5) {
+                try {
+                    val response = RetrofitInstance.api.getSession(sessionId)
+                    withContext(Dispatchers.Main) {
+                        code = response.code.toString()
+                        owner = response.host
+                        hosts = response.hosts?.keys?.toList() ?: listOf()
+                        guests = response.guests?.keys?.toList() ?: listOf()
+                        success = true
+                        errorLoading = false
+                    }
+                } catch (e: Exception) {
+                    attempts++
+                    Log.e("SessionScreen", "❌ Error obteniendo sesión (intento $attempts)", e)
+                    delay(1500) // Esperar 1.5s entre reintentos
                 }
-            } catch (e: Exception) {
-                Log.e("SessionScreen", "Error al obtener sesión", e)
+            }
+
+            if (!success) {
+                withContext(Dispatchers.Main) {
+                    errorLoading = true
+                }
             }
         }
     }
@@ -56,6 +67,15 @@ fun SessionScreen(sessionId: String) {
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        if (errorLoading) {
+            Text(
+                text = "❌ No se pudo cargar la sala",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.titleLarge
+            )
+            return@Column
+        }
+
         Text("Código de conexión:", style = MaterialTheme.typography.titleMedium)
         Text(code, style = MaterialTheme.typography.displaySmall)
 
