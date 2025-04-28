@@ -18,6 +18,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SessionScreen(sessionId: String) {
     val coroutineScope = rememberCoroutineScope()
@@ -25,7 +26,6 @@ fun SessionScreen(sessionId: String) {
 
     var code by remember { mutableStateOf("") }
     var owner by remember { mutableStateOf("") }
-    var hosts by remember { mutableStateOf(listOf<String>()) }
     var guests by remember { mutableStateOf(listOf<String>()) }
     var errorLoading by remember { mutableStateOf(false) }
 
@@ -38,18 +38,18 @@ fun SessionScreen(sessionId: String) {
             while (!success && attempts < 5) {
                 try {
                     val response = RetrofitInstance.api.getSession(sessionId)
+
                     withContext(Dispatchers.Main) {
-                        code = response.code.toString()
-                        owner = response.host
-                        hosts = response.hosts?.keys?.toList() ?: listOf()
-                        guests = response.guests?.keys?.toList() ?: listOf()
+                        code = response.body()?.code ?: ""
+                        owner = response.body()?.host ?: ""
+                        guests = response.body()?.guests?.keys?.toList() ?: listOf()
                         success = true
                         errorLoading = false
                     }
                 } catch (e: Exception) {
                     attempts++
                     Log.e("SessionScreen", "❌ Error obteniendo sesión (intento $attempts)", e)
-                    delay(1500) // Esperar 1.5s entre reintentos
+                    delay(1500) // Esperar 1.5 segundos entre reintentos
                 }
             }
 
@@ -88,11 +88,6 @@ fun SessionScreen(sessionId: String) {
                 .weight(1f)
         ) {
             item { Text("🎮 Owner: $owner", style = MaterialTheme.typography.bodyLarge) }
-
-            if (hosts.isNotEmpty()) {
-                item { Text("\n👑 Anfitriones:") }
-                items(hosts) { host -> Text("- $host") }
-            }
 
             if (guests.isNotEmpty()) {
                 item { Text("\n🙋 Invitados:") }
