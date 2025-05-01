@@ -1,4 +1,4 @@
-package com.kaz.tvplaylistify.reciever
+package com.kaz.tvplaylistify.receiver
 
 import android.util.Log
 import com.kaz.tvplaylistify.model.Cancion

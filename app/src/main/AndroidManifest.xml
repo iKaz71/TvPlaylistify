@@ -6,9 +6,6 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
-
-
-
     <uses-feature
         android:name="android.hardware.touchscreen"
         android:required="false" />
@@ -39,12 +36,16 @@
             android:theme="@style/Theme.TvPlaylistify"
             android:exported="false" />
 
-
-
         <service
             android:name=".service.VideoPlaybackService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
+
+        <receiver android:name=".receiver.CastReceiver" android:exported="true">
+            <intent-filter>
+                <action android:name="com.kaz.tvplaylistify.LANZAR_VIDEO" />
+            </intent-filter>
+        </receiver>
+
     </application>
 </manifest>
-

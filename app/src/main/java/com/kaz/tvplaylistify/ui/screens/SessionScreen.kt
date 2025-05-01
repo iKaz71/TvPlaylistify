@@ -1,3 +1,4 @@
+// SessionScreen.kt
 package com.kaz.tvplaylistify.ui.screens
 
 import android.content.Intent
@@ -21,87 +22,70 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SessionScreen(sessionId: String) {
-    val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     var code by remember { mutableStateOf("") }
     var owner by remember { mutableStateOf("") }
     var guests by remember { mutableStateOf(listOf<String>()) }
-    var errorLoading by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf(false) }
 
-    // Cargar la sesión con reintentos
     LaunchedEffect(Unit) {
-        coroutineScope.launch(Dispatchers.IO) {
-            var success = false
-            var attempts = 0
-
-            while (!success && attempts < 5) {
+        scope.launch(Dispatchers.IO) {
+            repeat(5) { attempt ->
                 try {
-                    val response = RetrofitInstance.api.getSession(sessionId)
-
-                    withContext(Dispatchers.Main) {
-                        code = response.body()?.code ?: ""
-                        owner = response.body()?.host ?: ""
-                        guests = response.body()?.guests?.keys?.toList() ?: listOf()
-                        success = true
-                        errorLoading = false
+                    val result = RetrofitInstance.api.getSession(sessionId).body()
+                    result?.let { data ->
+                        withContext(Dispatchers.Main) {
+                            code = data.code ?: ""
+                            owner = data.host ?: ""
+                            guests = data.guests?.keys?.toList() ?: listOf()
+                            error = false
+                        }
+                        return@launch
                     }
                 } catch (e: Exception) {
-                    attempts++
-                    Log.e("SessionScreen", "❌ Error obteniendo sesión (intento $attempts)", e)
-                    delay(1500) // Esperar 1.5 segundos entre reintentos
+                    Log.e("SessionScreen", "Error obteniendo sala (intento ${attempt + 1})", e)
+                    delay(1500)
                 }
             }
-
-            if (!success) {
-                withContext(Dispatchers.Main) {
-                    errorLoading = true
-                }
-            }
+            error = true
         }
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp),
+        modifier = Modifier.fillMaxSize().padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        if (errorLoading) {
-            Text(
-                text = "❌ No se pudo cargar la sala",
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.titleLarge
-            )
-            return@Column
+        if (error) {
+            Text("❌ No se pudo cargar la sala", color = MaterialTheme.colorScheme.error)
+            return
         }
 
         Text("Código de conexión:", style = MaterialTheme.typography.titleMedium)
         Text(code, style = MaterialTheme.typography.displaySmall)
-
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(Modifier.height(24.dp))
         Text("Conectados", style = MaterialTheme.typography.titleLarge)
 
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-        ) {
-            item { Text("🎮 Owner: $owner", style = MaterialTheme.typography.bodyLarge) }
-
+        LazyColumn(Modifier.fillMaxWidth().weight(1f)) {
+            item { Text("🎮 Owner: $owner") }
             if (guests.isNotEmpty()) {
                 item { Text("\n🙋 Invitados:") }
-                items(guests) { guest -> Text("- $guest") }
+                items(guests) { Text("- $it") }
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(Modifier.height(24.dp))
 
         Button(onClick = {
-            val serviceIntent = Intent(context, VideoPlaybackService::class.java)
-            context.startForegroundService(serviceIntent)
+            val intent = Intent(context, VideoPlaybackService::class.java).apply {
+                putExtra("EXTRA_SESSION_ID", sessionId) // <- muy importante
+            }
+            Log.d("SessionScreen", "🛰 Enviando intent con sessionId = $sessionId")
+            context.startForegroundService(intent)
         }) {
             Text("▶ Reproducir Playlist")
         }
+
     }
 }

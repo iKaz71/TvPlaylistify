@@ -6,75 +6,88 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
-import android.os.*
+import android.os.Build
+import android.os.Handler
+import android.os.IBinder
 import android.util.Log
-import com.kaz.tvplaylistify.NextVideoActivity
+import androidx.core.app.NotificationCompat
+import com.kaz.tvplaylistify.network.firebase.FirebaseQueueListener
+import com.kaz.tvplaylistify.util.YouTubeLauncher
 
 class VideoPlaybackService : Service() {
 
-    private val TAG = "VideoPlaybackService"
-    private val handler = Handler(Looper.getMainLooper())
-
-    // 🔂 Lista provisional para pruebas
-    private val testPlaylist = listOf(
-        "dQw4w9WgXcQ",  // Rick Astley
-        "hTWKbfoikeg",  // Nirvana
-        "Ckom3gf57Yw"   // Muse
-    )
-
-    private var currentIndex = 0
+    private val handler = Handler()
+    private var isListening = false
 
     override fun onCreate() {
         super.onCreate()
-        startForegroundWithNotification()
-        reproducirVideoActual()
-    }
-
-    private fun startForegroundWithNotification() {
-        val channelId = "tv_playlistify_channel"
-        val channelName = "Reproducción TVPlaylistify"
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val channel = NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_LOW)
-        manager.createNotificationChannel(channel)
-
-        val notification: Notification = Notification.Builder(this, channelId)
-            .setContentTitle("TvPlaylistify en reproducción")
-            .setContentText("Controlando la playlist de YouTube")
-            .setSmallIcon(android.R.drawable.ic_media_play)
-            .build()
-
-        startForeground(1, notification)
-    }
-
-    private fun reproducirVideoActual() {
-        if (currentIndex >= testPlaylist.size) {
-            Log.d(TAG, "Fin de la lista de reproducción")
-            stopSelf()
-            return
-        }
-
-        val videoId = testPlaylist[currentIndex]
-        val duracionMs = 10_000L // ⏱ Duración simulada de 10 segundos
-
-        Log.d(TAG, "Lanzando video $videoId (duración: 10s)")
-
-        val intent = Intent(this, NextVideoActivity::class.java).apply {
-            putExtra("VIDEO_ID", videoId)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        startActivity(intent)
-
-        handler.postDelayed({
-            currentIndex++
-            Log.d(TAG, "Avanzando al siguiente video (índice = $currentIndex)")
-            reproducirVideoActual()
-        }, duracionMs)
+        createNotificationChannel()
+        startForeground(
+            1,
+            createNotification("Esperando video...")
+        )
+        Log.d("VideoPlaybackService", "✅ Servicio inicializado")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        return START_STICKY
+        val sessionId = intent?.getStringExtra("EXTRA_SESSION_ID")
+        Log.d("VideoPlaybackService", "📦 sessionId recibido en onStartCommand: $sessionId")
+
+        if (sessionId != null) {
+            FirebaseQueueListener.setOnNewVideoListener { videoId, durationMs ->
+                reproducirVideo(videoId, durationMs)
+            }
+            FirebaseQueueListener.empezarAEscucharQueue(this, sessionId)
+            Log.d("VideoPlaybackService", "🛰 Iniciando escucha de Firebase con sessionId: $sessionId")
+        } else {
+            Log.w("VideoPlaybackService", "⚠️ sessionId nulo en onStartCommand, pero continuaré esperando...")
+        }
+
+        return START_REDELIVER_INTENT
+    }
+
+    private fun reproducirVideo(videoId: String, durationMs: Long) {
+        Log.d("VideoPlaybackService", "▶ Reproduciendo video: $videoId por $durationMs ms")
+
+        YouTubeLauncher.launchYoutube(this, videoId)
+
+        val notification = createNotification("Reproduciendo: $videoId")
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(1, notification)
+
+        handler.removeCallbacksAndMessages(null)
+        handler.postDelayed({
+            Log.d("VideoPlaybackService", "⏭ Video terminado, esperando siguiente...")
+        }, durationMs)
+    }
+
+    private fun createNotification(contentText: String): Notification {
+        return NotificationCompat.Builder(this, "tvplaylistify_channel")
+            .setContentTitle("TvPlaylistify")
+            .setContentText(contentText)
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val serviceChannel = NotificationChannel(
+                "tvplaylistify_channel",
+                "TvPlaylistify Playback",
+                NotificationManager.IMPORTANCE_LOW
+            )
+            val manager = getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(serviceChannel)
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    override fun onDestroy() {
+        super.onDestroy()
+        handler.removeCallbacksAndMessages(null)
+        isListening = false
+        Log.d("VideoPlaybackService", "❌ Servicio destruido")
+    }
 }
