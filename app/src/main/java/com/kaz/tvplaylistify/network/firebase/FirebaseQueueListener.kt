@@ -35,11 +35,7 @@ object FirebaseQueueListener {
                 if (!videoId.isNullOrBlank()) {
                     newVideoListener?.invoke(videoId, durationMs)
 
-                    Intent(context, CastReceiver::class.java).apply {
-                        action = ACTION_LANZAR_VIDEO
-                        putExtra(EXTRA_VIDEO_ID, videoId)
-                        context.sendBroadcast(this)
-                    }
+
                 } else {
                     Log.w("FirebaseQueueListener", "⚠️ videoId nulo o vacío, omitiendo...")
                 }
