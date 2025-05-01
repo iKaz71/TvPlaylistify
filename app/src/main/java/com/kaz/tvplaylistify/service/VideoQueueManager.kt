@@ -15,13 +15,16 @@ data class Video(
 object VideoQueueManager {
 
     private val videos = mutableListOf<Video>()
+    private val keys = mutableListOf<String>()
     private var currentIndex = 0
     private var context: Context? = null
     private val handler = Handler(Looper.getMainLooper())
     private var reproduciendo = false
+    private var sessionId: String? = null
 
     fun inicializar(ctx: Context, sessionId: String) {
         context = ctx
+        this.sessionId = sessionId
         Log.d("VideoQueueManager", "🚀 Inicializando escucha de cola en sesión: $sessionId")
 
         FirebaseDatabase.getInstance()
@@ -37,6 +40,7 @@ object VideoQueueManager {
                     if (!videoId.isNullOrBlank() && durationMs > 0) {
                         val video = Video(videoId, durationMs)
                         videos.add(video)
+                        keys.add(snapshot.key ?: "")
                         Log.d("VideoQueueManager", "🎵 Video agregado: ${video.id} (${video.durationMs}ms)")
 
                         reproducirSiguiente()
@@ -79,10 +83,30 @@ object VideoQueueManager {
         reproduciendo = true
 
         handler.postDelayed({
+            eliminarVideoActualDeFirebase()
             currentIndex++
             reproduciendo = false
             reproducirSiguiente()
         }, video.durationMs)
+    }
+
+    private fun eliminarVideoActualDeFirebase() {
+        val session = sessionId ?: return
+        if (currentIndex >= keys.size) return
+        val key = keys[currentIndex]
+
+        FirebaseDatabase.getInstance()
+            .getReference("sessions")
+            .child(session)
+            .child("queue")
+            .child(key)
+            .removeValue()
+            .addOnSuccessListener {
+                Log.d("VideoQueueManager", "🧹 Video eliminado de Firebase: $key")
+            }
+            .addOnFailureListener {
+                Log.e("VideoQueueManager", "❌ Error al eliminar video de Firebase", it)
+            }
     }
 
     private fun parseDurationToMillis(iso: String): Long {
