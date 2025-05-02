@@ -17,6 +17,13 @@ import com.kaz.tvplaylistify.service.VideoPlaybackService
 import com.kaz.tvplaylistify.ui.screens.SessionScreen
 import com.kaz.tvplaylistify.ui.theme.TVPlaylistifyTheme
 import com.kaz.tvplaylistify.util.SessionManager
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+
 
 class MainActivity : ComponentActivity() {
 
@@ -69,10 +76,13 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // UI
-                sessionId?.let { SessionScreen(sessionId = it) } ?: Surface {
-                    Text("Inicializando sesión…", style = MaterialTheme.typography.headlineSmall)
+                // UI inicio de sesión
+                sessionId?.let { SessionScreen() } ?: Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF0F0F0F)) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = Color.Red)
+                    }
                 }
+
             }
         }
     }
