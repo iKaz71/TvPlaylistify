@@ -20,19 +20,17 @@ object VideoQueueManager {
     private var context: Context? = null
     private val handler = Handler(Looper.getMainLooper())
     private var reproduciendo = false
-    private var codigoSala: String? = null
     private var sessionId: String? = null
 
     fun inicializar(ctx: Context, codigo: String, sessionId: String) {
         context = ctx
-        codigoSala = codigo
         this.sessionId = sessionId
 
-        Log.d("VideoQueueManager", "🚀 Inicializando escucha de cola en código: $codigo")
+        Log.d("VideoQueueManager", "🚀 Inicializando escucha de cola en sesión: $sessionId")
 
         FirebaseDatabase.getInstance()
             .getReference("sessions")
-            .child(codigo)
+            .child(sessionId)
             .child("queue")
             .addChildEventListener(object : ChildEventListener {
                 override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
@@ -47,7 +45,6 @@ object VideoQueueManager {
                         videos.add(video)
                         keys.add(snapshot.key ?: "")
                         Log.d("VideoQueueManager", "🎵 Video agregado: ${video.id} (${video.durationMs}ms)")
-
                         reproducirSiguiente()
                     } else {
                         Log.w("VideoQueueManager", "⚠️ Video inválido o duración no válida")
@@ -63,7 +60,7 @@ object VideoQueueManager {
             })
     }
 
-    private fun reproducirSiguiente() {
+    fun reproducirSiguiente() {
         val ctx = context ?: return
 
         if (videos.isEmpty()) {
@@ -96,13 +93,13 @@ object VideoQueueManager {
     }
 
     private fun eliminarVideoActualDeFirebase() {
-        val codigo = codigoSala ?: return
+        val sessionId = sessionId ?: return
         if (currentIndex >= keys.size) return
         val key = keys[currentIndex]
 
         FirebaseDatabase.getInstance()
             .getReference("sessions")
-            .child(codigo)
+            .child(sessionId)
             .child("queue")
             .child(key)
             .removeValue()

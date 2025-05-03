@@ -10,6 +10,9 @@ import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.google.firebase.database.FirebaseDatabase
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.ValueEventListener
 import com.kaz.tvplaylistify.R
 
 class VideoPlaybackService : Service() {
@@ -35,7 +38,7 @@ class VideoPlaybackService : Service() {
                     if (codigo != null) {
                         Log.d("VideoPlaybackService", "📟 Código de sesión obtenido: $codigo")
                         VideoQueueManager.inicializar(applicationContext, codigo, sessionId)
-
+                        escucharPlayTrigger(sessionId)
                     } else {
                         Log.e("VideoPlaybackService", "❌ No se encontró el código para sessionId: $sessionId")
                     }
@@ -48,6 +51,25 @@ class VideoPlaybackService : Service() {
         }
 
         return START_STICKY
+    }
+
+    private fun escucharPlayTrigger(sessionId: String) {
+        val ref = FirebaseDatabase.getInstance()
+            .getReference("sessions/$sessionId/playback/play")
+
+        ref.addValueEventListener(object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val shouldPlay = snapshot.getValue(Boolean::class.java) ?: false
+                if (shouldPlay) {
+                    Log.d("PlaybackManager", "✅ Playback activado")
+                    VideoQueueManager.reproducirSiguiente()
+                }
+            }
+
+            override fun onCancelled(error: DatabaseError) {
+                Log.e("PlaybackManager", "❌ Error escuchando playback", error.toException())
+            }
+        })
     }
 
     private fun buildNotification(): Notification {
