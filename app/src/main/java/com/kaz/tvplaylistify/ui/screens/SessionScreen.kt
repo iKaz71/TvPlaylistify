@@ -1,25 +1,35 @@
 package com.kaz.tvplaylistify.ui.screens
 
-import android.content.Context
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.firebase.database.FirebaseDatabase
+import androidx.compose.ui.text.font.FontWeight
+
 
 @Composable
-fun SessionScreen() {
-    val context = LocalContext.current
-    val sessionCode = "8799" // ejemplo fijo
+fun SessionScreen(sessionId: String) {
+    var sessionCode by remember { mutableStateOf("----") }
     val connectedUsers = listOf("Tú (Owner)", "iPhone de Dani", "Android de Paco")
+
+    // 🔄 Obtener el código desde Firebase
+    LaunchedEffect(sessionId) {
+        val ref = FirebaseDatabase.getInstance().getReference("sessions/$sessionId/code")
+        ref.get().addOnSuccessListener { snapshot ->
+            sessionCode = snapshot.getValue(String::class.java) ?: "----"
+            Log.d("SessionScreen", "📟 Código de sesión cargado: $sessionCode")
+        }.addOnFailureListener {
+            Log.e("SessionScreen", "❌ Error al obtener código de sesión", it)
+        }
+    }
 
     Surface(
         modifier = Modifier
@@ -35,7 +45,6 @@ fun SessionScreen() {
             verticalArrangement = Arrangement.SpaceBetween
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                // Logo temporal
                 Box(
                     modifier = Modifier
                         .size(80.dp)
@@ -43,17 +52,8 @@ fun SessionScreen() {
                 )
 
                 Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Código de conexión",
-                    color = Color.Gray,
-                    fontSize = 14.sp
-                )
-                Text(
-                    text = sessionCode,
-                    color = Color.White,
-                    fontSize = 48.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("Código de conexión", color = Color.Gray, fontSize = 14.sp)
+                Text(sessionCode, color = Color.White, fontSize = 48.sp, fontWeight = FontWeight.Bold)
 
                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -66,14 +66,8 @@ fun SessionScreen() {
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
-
                 connectedUsers.forEach { user ->
-                    Text(
-                        text = "• $user",
-                        color = Color.LightGray,
-                        fontSize = 16.sp,
-                        modifier = Modifier.align(Alignment.Start)
-                    )
+                    Text("• $user", color = Color.LightGray, fontSize = 16.sp, modifier = Modifier.align(Alignment.Start))
                 }
             }
 
@@ -85,12 +79,7 @@ fun SessionScreen() {
                     .fillMaxWidth()
                     .height(56.dp)
             ) {
-                Text(
-                    text = "▶ Reproducir Playlist",
-                    color = Color.Black,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                Text("▶ Reproducir Playlist", color = Color.Black, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             }
         }
     }

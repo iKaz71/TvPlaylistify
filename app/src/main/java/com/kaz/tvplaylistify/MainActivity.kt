@@ -9,28 +9,25 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import com.kaz.tvplaylistify.network.firebase.FirebaseQueueListener
 import com.kaz.tvplaylistify.service.OverlayService
 import com.kaz.tvplaylistify.service.VideoPlaybackService
 import com.kaz.tvplaylistify.ui.screens.SessionScreen
 import com.kaz.tvplaylistify.ui.theme.TVPlaylistifyTheme
 import com.kaz.tvplaylistify.util.SessionManager
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-
 
 class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Permiso de overlay para los controles flotantes
         val overlayLauncher = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()
         ) {
@@ -41,10 +38,7 @@ class MainActivity : ComponentActivity() {
 
         if (!Settings.canDrawOverlays(this)) {
             overlayLauncher.launch(
-                Intent(
-                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                    Uri.parse("package:$packageName")
-                )
+                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
             )
         } else {
             startService(Intent(this, OverlayService::class.java))
@@ -55,20 +49,21 @@ class MainActivity : ComponentActivity() {
                 var sessionId by remember { mutableStateOf<String?>(null) }
 
                 LaunchedEffect(Unit) {
-                    val uidTV = "tv-${android.os.Build.SERIAL ?: "default"}"
+                    val uidTV = "tv-${Build.SERIAL ?: "default"}"
                     SessionManager.obtenerOcrearSesion(uidTV, this@MainActivity) { id ->
                         sessionId = id
                         Log.d("MainActivity", "Sesión lista: $id")
 
-                        /* 1️⃣ Arrancamos YA el servicio de reproducción.
-                         *    Así el servicio registra el listener ANTES de que
-                         *    Firebase emita los «childAdded».                  */
-                        val svcIntent = Intent(this@MainActivity, VideoPlaybackService::class.java)
+                        // ✅ PASAMOS el sessionId al servicio aquí
+                        val svcIntent = Intent(this@MainActivity, VideoPlaybackService::class.java).apply {
+                            putExtra("EXTRA_SESSION_ID", id)
+                        }
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             startForegroundService(svcIntent)
-                        } else startService(svcIntent)
+                        } else {
+                            startService(svcIntent)
+                        }
 
-                        /* 2️⃣ Ahora sí, empezamos a escuchar la cola. */
                         FirebaseQueueListener.empezarAEscucharQueue(
                             context = this@MainActivity,
                             sessionId = id
@@ -76,13 +71,18 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // UI inicio de sesión
-                sessionId?.let { SessionScreen() } ?: Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFF0F0F0F)) {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                sessionId?.let {
+                    SessionScreen(sessionId = it)
+                } ?: Surface(
+                    modifier = Modifier.fillMaxSize().background(Color.Black)
+                ) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
                         CircularProgressIndicator(color = Color.Red)
                     }
                 }
-
             }
         }
     }
