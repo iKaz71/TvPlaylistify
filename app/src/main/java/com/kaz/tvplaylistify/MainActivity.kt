@@ -54,7 +54,8 @@ class MainActivity : ComponentActivity() {
                         sessionId = id
                         Log.d("MainActivity", "Sesión lista: $id")
 
-                        // ✅ PASAMOS el sessionId al servicio aquí
+                        Log.d("MainActivity", "🎬 Lanzando servicio con sessionId: $id")
+
                         val svcIntent = Intent(this@MainActivity, VideoPlaybackService::class.java).apply {
                             putExtra("EXTRA_SESSION_ID", id)
                         }

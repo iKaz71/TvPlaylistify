@@ -20,19 +20,24 @@ object VideoQueueManager {
     private var context: Context? = null
     private val handler = Handler(Looper.getMainLooper())
     private var reproduciendo = false
+    private var codigoSala: String? = null
     private var sessionId: String? = null
 
-    fun inicializar(ctx: Context, sessionId: String) {
+    fun inicializar(ctx: Context, codigo: String, sessionId: String) {
         context = ctx
+        codigoSala = codigo
         this.sessionId = sessionId
-        Log.d("VideoQueueManager", "🚀 Inicializando escucha de cola en sesión: $sessionId")
+
+        Log.d("VideoQueueManager", "🚀 Inicializando escucha de cola en código: $codigo")
 
         FirebaseDatabase.getInstance()
             .getReference("sessions")
-            .child(sessionId)
+            .child(codigo)
             .child("queue")
             .addChildEventListener(object : ChildEventListener {
                 override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
+                    Log.d("VideoQueueManager", "📡 Nuevo video detectado: ${snapshot.key}")
+
                     val videoId = snapshot.child("id").getValue(String::class.java)
                     val durationIso = snapshot.child("duration").getValue(String::class.java)
                     val durationMs = durationIso?.let { parseDurationToMillis(it) } ?: 0L
@@ -91,13 +96,13 @@ object VideoQueueManager {
     }
 
     private fun eliminarVideoActualDeFirebase() {
-        val session = sessionId ?: return
+        val codigo = codigoSala ?: return
         if (currentIndex >= keys.size) return
         val key = keys[currentIndex]
 
         FirebaseDatabase.getInstance()
             .getReference("sessions")
-            .child(session)
+            .child(codigo)
             .child("queue")
             .child(key)
             .removeValue()
