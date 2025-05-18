@@ -9,15 +9,17 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.google.firebase.database.FirebaseDatabase
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.ValueEventListener
+import com.google.firebase.database.*
 import com.kaz.tvplaylistify.R
+import com.kaz.tvplaylistify.receiver.CastReceiver
+import com.kaz.tvplaylistify.util.Constants.ACTION_LANZAR_VIDEO
+import com.kaz.tvplaylistify.util.Constants.EXTRA_VIDEO_ID
 
 class VideoPlaybackService : Service() {
 
     private val CHANNEL_ID = "video_playback_channel"
+    private var playbackListener: ValueEventListener? = null
+    private var playbackRef: DatabaseReference? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val sessionId = intent?.getStringExtra("EXTRA_SESSION_ID")
@@ -38,7 +40,7 @@ class VideoPlaybackService : Service() {
                     if (codigo != null) {
                         Log.d("VideoPlaybackService", "📟 Código de sesión obtenido: $codigo")
                         VideoQueueManager.inicializar(applicationContext, codigo, sessionId)
-                        escucharPlayTrigger(sessionId)
+                        escucharPlaybackState(sessionId)
                     } else {
                         Log.e("VideoPlaybackService", "❌ No se encontró el código para sessionId: $sessionId")
                     }
@@ -53,23 +55,65 @@ class VideoPlaybackService : Service() {
         return START_STICKY
     }
 
-    private fun escucharPlayTrigger(sessionId: String) {
-        val ref = FirebaseDatabase.getInstance()
-            .getReference("sessions/$sessionId/playback/play")
+    private fun escucharPlaybackState(sessionId: String) {
+        playbackRef = FirebaseDatabase.getInstance()
+            .getReference("playbackState/$sessionId")
 
-        ref.addValueEventListener(object : ValueEventListener {
+        playbackListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                val shouldPlay = snapshot.getValue(Boolean::class.java) ?: false
-                if (shouldPlay) {
-                    Log.d("PlaybackManager", "✅ Playback activado")
-                    VideoQueueManager.reproducirSiguiente()
+                val isPlaying = snapshot.child("playing").getValue(Boolean::class.java) ?: false
+                val currentVideoId = snapshot.child("currentVideo/id").getValue(String::class.java)
+                val durationIso = snapshot.child("currentVideo/duration").getValue(String::class.java)
+                val durationMs = parseDurationToMillis(durationIso)
+
+                if (isPlaying && !currentVideoId.isNullOrBlank()) {
+                    Log.d("PlaybackManager", "🎬 Reproducción iniciada automáticamente: $currentVideoId ($durationMs ms)")
+
+                    val intent = Intent(applicationContext, CastReceiver::class.java).apply {
+                        action = ACTION_LANZAR_VIDEO
+                        putExtra(EXTRA_VIDEO_ID, currentVideoId)
+                    }
+                    applicationContext.sendBroadcast(intent)
+
+                    if (durationMs > 0) {
+                        Thread {
+                            try {
+                                Thread.sleep(durationMs)
+                                Log.d("PlaybackManager", "⏭ Tiempo agotado, lanzando siguiente...")
+                                VideoQueueManager.reproducirSiguiente()
+                            } catch (e: InterruptedException) {
+                                Log.e("PlaybackManager", "❌ Interrumpido durante espera", e)
+                            }
+                        }.start()
+                    }
                 }
             }
 
             override fun onCancelled(error: DatabaseError) {
-                Log.e("PlaybackManager", "❌ Error escuchando playback", error.toException())
+                Log.e("PlaybackManager", "❌ Error escuchando playbackState", error.toException())
             }
-        })
+        }
+
+        playbackRef?.addValueEventListener(playbackListener!!)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        playbackListener?.let {
+            playbackRef?.removeEventListener(it)
+        }
+    }
+
+    private fun parseDurationToMillis(iso: String?): Long {
+        if (iso.isNullOrBlank()) return 0L
+        val regex = Regex("""PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?""")
+        val match = regex.find(iso) ?: return 0L
+
+        val h = match.groupValues[1].toIntOrNull() ?: 0
+        val m = match.groupValues[2].toIntOrNull() ?: 0
+        val s = match.groupValues[3].toIntOrNull() ?: 0
+
+        return ((h * 3600 + m * 60 + s) * 1000).toLong()
     }
 
     private fun buildNotification(): Notification {

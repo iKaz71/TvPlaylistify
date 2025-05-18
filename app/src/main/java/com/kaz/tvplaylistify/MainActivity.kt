@@ -16,7 +16,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import com.kaz.tvplaylistify.network.firebase.FirebaseQueueListener
 import com.kaz.tvplaylistify.service.OverlayService
 import com.kaz.tvplaylistify.service.VideoPlaybackService
 import com.kaz.tvplaylistify.ui.screens.SessionScreen
@@ -52,30 +51,26 @@ class MainActivity : ComponentActivity() {
                     val uidTV = "tv-${Build.SERIAL ?: "default"}"
                     SessionManager.obtenerOcrearSesion(uidTV, this@MainActivity) { id ->
                         sessionId = id
-                        Log.d("MainActivity", "Sesión lista: $id")
-
-                        Log.d("MainActivity", "🎬 Lanzando servicio con sessionId: $id")
+                        Log.d("MainActivity", "🎬 Sesión lista: $id")
 
                         val svcIntent = Intent(this@MainActivity, VideoPlaybackService::class.java).apply {
                             putExtra("EXTRA_SESSION_ID", id)
                         }
+
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             startForegroundService(svcIntent)
                         } else {
                             startService(svcIntent)
                         }
-
-                        FirebaseQueueListener.empezarAEscucharQueue(
-                            context = this@MainActivity,
-                            sessionId = id
-                        )
                     }
                 }
 
                 sessionId?.let {
                     SessionScreen(sessionId = it)
                 } ?: Surface(
-                    modifier = Modifier.fillMaxSize().background(Color.Black)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black)
                 ) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
