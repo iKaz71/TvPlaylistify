@@ -1,9 +1,6 @@
 package com.kaz.tvplaylistify.service
 
-import android.app.Notification
-import android.app.NotificationChannel
-import android.app.NotificationManager
-import android.app.Service
+import android.app.*
 import android.content.Intent
 import android.os.Build
 import android.os.IBinder
@@ -78,9 +75,28 @@ class VideoPlaybackService : Service() {
                     if (durationMs > 0) {
                         Thread {
                             try {
-                                Thread.sleep(durationMs)
-                                Log.d("PlaybackManager", "⏭ Tiempo agotado, lanzando siguiente...")
-                                VideoQueueManager.reproducirSiguiente()
+                                Thread.sleep(durationMs - 1500)
+
+                                val queueRef = FirebaseDatabase.getInstance()
+                                    .getReference("queues")
+                                    .child(sessionId)
+
+                                queueRef.orderByKey().limitToFirst(1).get()
+                                    .addOnSuccessListener { queueSnapshot ->
+                                        val siguiente = queueSnapshot.children.firstOrNull()
+                                        if (siguiente != null) {
+                                            Log.d("PlaybackManager", "⏭ Hay otra canción, se notificará a VideoQueueManager")
+                                            VideoQueueManager.reproducirSiEsNecesario()
+                                        } else {
+                                            Log.d("PlaybackManager", "⛔ Cola vacía, marcando reproducción como detenida")
+                                            FirebaseDatabase.getInstance()
+                                                .getReference("playbackState")
+                                                .child(sessionId)
+                                                .child("playing")
+                                                .setValue(false)
+                                        }
+                                    }
+
                             } catch (e: InterruptedException) {
                                 Log.e("PlaybackManager", "❌ Interrumpido durante espera", e)
                             }
@@ -108,11 +124,9 @@ class VideoPlaybackService : Service() {
         if (iso.isNullOrBlank()) return 0L
         val regex = Regex("""PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?""")
         val match = regex.find(iso) ?: return 0L
-
         val h = match.groupValues[1].toIntOrNull() ?: 0
         val m = match.groupValues[2].toIntOrNull() ?: 0
         val s = match.groupValues[3].toIntOrNull() ?: 0
-
         return ((h * 3600 + m * 60 + s) * 1000).toLong()
     }
 

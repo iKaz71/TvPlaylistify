@@ -5,31 +5,21 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import com.google.firebase.database.*
+import com.kaz.tvplaylistify.model.Cancion
 import com.kaz.tvplaylistify.util.YouTubeLauncher
-
-data class Video(
-    val id: String,
-    val durationMs: Long,
-    val titulo: String,
-    val thumbnailUrl: String,
-    val usuario: String
-)
 
 object VideoQueueManager {
 
-    private val videos = mutableListOf<Video>()
-    private val keys = mutableListOf<String>()
-    private var currentIndex = 0
     private var context: Context? = null
+    private var sessionId: String? = null
     private val handler = Handler(Looper.getMainLooper())
     private var reproduciendo = false
-    private var sessionId: String? = null
 
     fun inicializar(ctx: Context, codigo: String, sessionId: String) {
         context = ctx
         this.sessionId = sessionId
 
-        Log.d("VideoQueueManager", "\uD83D\uDE80 Inicializando cola completa en sesión: $sessionId")
+        Log.d("VideoQueueManager", "🚀 Inicializando cola completa en sesión: $sessionId")
 
         val queueRef = FirebaseDatabase.getInstance()
             .getReference("queues")
@@ -37,11 +27,8 @@ object VideoQueueManager {
 
         queueRef.addListenerForSingleValueEvent(object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
-                Log.d("VideoQueueManager", "\uD83D\uDCCB Lectura inicial de la cola")
-                snapshot.children.forEach { child ->
-                    agregarVideoDesdeSnapshot(child)
-                }
-                reproducirSiguiente()
+                Log.d("VideoQueueManager", "📋 Lectura inicial de la cola")
+                reproducirSiEsNecesario()
             }
 
             override fun onCancelled(error: DatabaseError) {
@@ -52,9 +39,7 @@ object VideoQueueManager {
         queueRef.addChildEventListener(object : ChildEventListener {
             override fun onChildAdded(snapshot: DataSnapshot, previousChildName: String?) {
                 Log.d("VideoQueueManager", "➕ Nuevo video detectado: ${snapshot.key}")
-                if (agregarVideoDesdeSnapshot(snapshot)) {
-                    reproducirSiguiente()
-                }
+                reproducirSiEsNecesario()
             }
 
             override fun onChildChanged(snapshot: DataSnapshot, previousChildName: String?) {}
@@ -66,96 +51,80 @@ object VideoQueueManager {
         })
     }
 
-    private fun agregarVideoDesdeSnapshot(snapshot: DataSnapshot): Boolean {
-        val videoId = snapshot.child("id").getValue(String::class.java)
-        val durationIso = snapshot.child("duration").getValue(String::class.java)
-        val titulo = snapshot.child("titulo").getValue(String::class.java) ?: ""
-        val usuario = snapshot.child("usuario").getValue(String::class.java) ?: ""
-        val thumbnailUrl = snapshot.child("thumbnailUrl").getValue(String::class.java) ?: ""
-        val durationMs = durationIso?.let { parseDurationToMillis(it) } ?: 0L
-
-        if (!videoId.isNullOrBlank() && durationMs > 0) {
-            val video = Video(videoId, durationMs, titulo, thumbnailUrl, usuario)
-            videos.add(video)
-            keys.add(snapshot.key ?: "")
-            Log.d("VideoQueueManager", "\uD83C\uDFB5 Video agregado a la lista: ${video.id} (${durationMs}ms)")
-            return true
-        } else {
-            Log.w("VideoQueueManager", "⚠️ Video inválido: $videoId con duración: $durationIso")
-            return false
-        }
-    }
-
-    fun reproducirSiguiente() {
+    fun reproducirSiEsNecesario() {
         val ctx = context ?: return
-
-        if (videos.isEmpty()) {
-            Log.d("VideoQueueManager", "\uD83D\uDD50 No hay videos en la lista interna")
-            return
-        }
-
-        if (currentIndex >= videos.size) {
-            Log.d("VideoQueueManager", "\uD83D\uDED1 Fin de la lista. YouTube continuará solo.")
-            reproduciendo = false
-            return
-        }
+        val sid = sessionId ?: return
 
         if (reproduciendo) {
-            Log.d("VideoQueueManager", "⏳ Ya hay un video en reproducción")
+            Log.d("VideoQueueManager", "⏳ Aún hay video en reproducción, no se hará nada.")
             return
         }
 
-        val video = videos[currentIndex]
-        Log.d("VideoQueueManager", "▶ Reproduciendo video ${currentIndex + 1}/${videos.size}: ${video.id}")
-        YouTubeLauncher.launchYoutube(ctx, video.id)
-        actualizarPlaybackState(video)
-        reproduciendo = true
+        val queueRef = FirebaseDatabase.getInstance().getReference("queues").child(sid)
 
-        handler.postDelayed({
-            eliminarVideoActualDeFirebase()
-            currentIndex++
-            reproduciendo = false
-            reproducirSiguiente()
-        }, video.durationMs)
+        queueRef.get().addOnSuccessListener { snapshot ->
+            val primerNodo = snapshot.children.firstOrNull() ?: run {
+                Log.d("VideoQueueManager", "⛔ Cola vacía, no hay videos para reproducir")
+                return@addOnSuccessListener
+            }
+
+            val id = primerNodo.child("id").getValue(String::class.java)
+            val titulo = primerNodo.child("titulo").getValue(String::class.java) ?: ""
+            val usuario = primerNodo.child("usuario").getValue(String::class.java) ?: ""
+            val thumbnailUrl = primerNodo.child("thumbnailUrl").getValue(String::class.java) ?: ""
+            val durationIso = primerNodo.child("duration").getValue(String::class.java)
+            val durationMs = durationIso?.let { parseDurationToMillis(it) } ?: 0L
+            val key = primerNodo.key ?: return@addOnSuccessListener
+
+            if (id.isNullOrBlank() || durationMs <= 0) {
+                Log.w("VideoQueueManager", "⚠️ Video inválido detectado. Ignorando.")
+                return@addOnSuccessListener
+            }
+
+            val cancion = Cancion(id, titulo, usuario, thumbnailUrl)
+
+            // 🧹 Eliminar inmediatamente el video para evitar repetirlo
+            queueRef.child(key).removeValue()
+                .addOnSuccessListener {
+                    Log.d("VideoQueueManager", "🧹 Video eliminado de Firebase al iniciar: $key")
+                }
+                .addOnFailureListener {
+                    Log.e("VideoQueueManager", "❌ Error al eliminar video antes de reproducir", it)
+                }
+
+            Log.d("VideoQueueManager", "▶ Reproduciendo video: ${cancion.id}")
+            YouTubeLauncher.launchYoutube(ctx, cancion.id)
+            actualizarPlaybackState(cancion, durationMs)
+            reproduciendo = true
+
+            handler.postDelayed({
+                reproduciendo = false
+                reproducirSiEsNecesario()
+            }, durationMs + 1000L)
+        }.addOnFailureListener {
+            Log.e("VideoQueueManager", "❌ Error al obtener la cola actual desde Firebase", it)
+        }
     }
 
-    private fun actualizarPlaybackState(video: Video) {
+    private fun actualizarPlaybackState(cancion: Cancion, durationMs: Long) {
         val sessionId = sessionId ?: return
         val playbackRef = FirebaseDatabase.getInstance().getReference("playbackState").child(sessionId)
 
         val update = mapOf(
             "playing" to true,
-            "currentVideo/id" to video.id,
-            "currentVideo/titulo" to video.titulo,
-            "currentVideo/thumbnailUrl" to video.thumbnailUrl,
-            "currentVideo/usuario" to video.usuario,
-            "currentVideo/duration" to formatDurationToIso(video.durationMs)
+            "currentVideo/id" to cancion.id,
+            "currentVideo/titulo" to cancion.titulo,
+            "currentVideo/thumbnailUrl" to cancion.thumbnailUrl,
+            "currentVideo/usuario" to cancion.usuario,
+            "currentVideo/duration" to formatDurationToIso(durationMs)
         )
 
         playbackRef.updateChildren(update)
             .addOnSuccessListener {
-                Log.d("VideoQueueManager", "\uD83D\uDCF1 playbackState actualizado con ${video.id}")
+                Log.d("VideoQueueManager", "📱 playbackState actualizado con ${cancion.id}")
             }
             .addOnFailureListener {
                 Log.e("VideoQueueManager", "❌ Error actualizando playbackState", it)
-            }
-    }
-
-    private fun eliminarVideoActualDeFirebase() {
-        val sessionId = sessionId ?: return
-        if (currentIndex >= keys.size) return
-        val key = keys[currentIndex]
-
-        FirebaseDatabase.getInstance()
-            .getReference("queues")
-            .child(sessionId)
-            .child(key)
-            .removeValue()
-            .addOnSuccessListener {
-                Log.d("VideoQueueManager", "\uD83E\uDEB9 Video eliminado de Firebase: $key")
-            }
-            .addOnFailureListener {
-                Log.e("VideoQueueManager", "❌ Error al eliminar video de Firebase", it)
             }
     }
 
