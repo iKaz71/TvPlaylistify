@@ -99,8 +99,41 @@ object VideoQueueManager {
 
             handler.postDelayed({
                 reproduciendo = false
-                reproducirSiEsNecesario()
+
+                queueRef.get().addOnSuccessListener { cola ->
+                    if (cola.exists() && cola.children.any()) {
+                        Log.d("VideoQueueManager", "⏭ Hay otra canción, la reproduciremos ahora...")
+                        reproducirSiEsNecesario()
+                    } else {
+                        Log.d("VideoQueueManager", "✅ Fin de la cola. Limpiando playbackState y queue")
+
+                        val playbackRef = FirebaseDatabase.getInstance()
+                            .getReference("playbackState")
+                            .child(sid)
+
+                        val update = mapOf(
+                            "playing" to false,
+                            "currentVideo/id" to null,
+                            "currentVideo/titulo" to null,
+                            "currentVideo/thumbnailUrl" to null,
+                            "currentVideo/usuario" to null,
+                            "currentVideo/duration" to null
+                        )
+
+                        playbackRef.updateChildren(update)
+                            .addOnSuccessListener {
+                                Log.d("VideoQueueManager", "🧹 playbackState limpiado completamente")
+                            }
+                            .addOnFailureListener {
+                                Log.e("VideoQueueManager", "❌ Error limpiando playbackState", it)
+                            }
+
+                        queueRef.removeValue()
+                    }
+                }
+
             }, durationMs + 1000L)
+
         }.addOnFailureListener {
             Log.e("VideoQueueManager", "❌ Error al obtener la cola actual desde Firebase", it)
         }
