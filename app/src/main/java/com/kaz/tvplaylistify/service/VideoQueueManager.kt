@@ -91,24 +91,39 @@ object VideoQueueManager {
                 YouTubeLauncher.launchYoutube(ctx, nextSong.id)
 
 
-                val eliminado = withContext(Dispatchers.IO) {
-                    eliminarCancionReproducida(api, sid, pushKey)
-                }
-                Log.d("VideoQueueManager", "🔴 ¿Se eliminó la canción? $eliminado")
+                updatePlaybackState(sid, nextSong)
 
                 reproduciendo = true
 
+                // *** Elimina la canción después del tiempo de reproducción ***
                 handler.postDelayed({
-                    reproduciendo = false
-                    Log.d("VideoQueueManager", "⏭️ Tiempo finalizado, intentando reproducir siguiente...")
-                    reproducirSiEsNecesario()
+                    CoroutineScope(Dispatchers.Main).launch {
+                        val eliminado = withContext(Dispatchers.IO) {
+                            eliminarCancionReproducida(api, sid, pushKey)
+                        }
+                        Log.d("VideoQueueManager", "🔴 ¿Se eliminó la canción? $eliminado")
+                        reproduciendo = false
+                        Log.d("VideoQueueManager", "⏭️ Tiempo finalizado, intentando reproducir siguiente...")
+                        reproducirSiEsNecesario()
+                    }
                 }, durationMs + 1000L)
-
             } catch (e: Exception) {
                 Log.e("VideoQueueManager", "❌ Error al obtener la cola ordenada", e)
             }
         }
     }
+
+    private fun updatePlaybackState(sessionId: String, cancion: Cancion) {
+        FirebaseDatabase.getInstance()
+            .getReference("playbackState/$sessionId")
+            .setValue(
+                mapOf(
+                    "playing" to true,
+                    "currentVideo" to cancion
+                )
+            )
+    }
+
 
 
     private suspend fun eliminarCancionReproducida(api: ApiService, sessionId: String, pushKey: String, userId: String = "tv"): Boolean {
