@@ -24,6 +24,8 @@ import com.google.firebase.database.FirebaseDatabase
 import com.kaz.tvplaylistify.R
 import com.kaz.tvplaylistify.util.PersistentHostManager
 import net.glxn.qrgen.android.QRCode
+import androidx.compose.foundation.BorderStroke
+
 
 @Composable
 fun SessionScreen(sessionId: String) {
@@ -37,11 +39,13 @@ fun SessionScreen(sessionId: String) {
         ref.get().addOnSuccessListener { snapshot ->
             sessionCode = snapshot.getValue(String::class.java) ?: "----"
         }
-        // Cargar anfitriones persistentes del almacenamiento local
-        val hosts = PersistentHostManager.obtenerAnfitriones(context)
-        persistentHosts.clear()
-        persistentHosts.addAll(hosts)
+        // Uso correcto del callback:
+        PersistentHostManager.obtenerAnfitriones(context) { hosts ->
+            persistentHosts.clear()
+            persistentHosts.addAll(hosts)
+        }
     }
+
 
     Surface(
         modifier = Modifier
