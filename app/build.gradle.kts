@@ -83,4 +83,14 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+
+    implementation ("com.google.firebase:firebase-auth-ktx:22.3.1")
+    implementation ("com.google.android.gms:play-services-auth:21.0.0")
+    implementation("com.github.kenglxn.QRGen:android:3.0.1")
+
+
+
+
+
+
 }
