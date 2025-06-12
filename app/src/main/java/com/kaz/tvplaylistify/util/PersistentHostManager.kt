@@ -1,33 +1,30 @@
 package com.kaz.tvplaylistify.util
 
-import android.util.Log
-import com.google.firebase.database.FirebaseDatabase
+import android.content.Context
+import android.content.SharedPreferences
+import org.json.JSONArray
 
 object PersistentHostManager {
+    private const val PREF_NAME = "persistent_hosts"
+    private const val KEY_HOSTS = "hosts"
 
-    fun guardarAnfitriones(sessionId: String, hosts: List<String>, onResult: (Boolean) -> Unit) {
-        val ref = FirebaseDatabase.getInstance().getReference("hosts/default/$sessionId")
-        ref.setValue(hosts)
-            .addOnSuccessListener {
-                Log.d("PersistentHostManager", "✅ Anfitriones guardados en Firebase")
-                onResult(true)
-            }
-            .addOnFailureListener {
-                Log.e("PersistentHostManager", "❌ Error al guardar anfitriones", it)
-                onResult(false)
-            }
+    private fun getPrefs(context: Context): SharedPreferences {
+        return context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
     }
 
-    fun obtenerAnfitriones(sessionId: String, onResult: (List<String>) -> Unit) {
-        val ref = FirebaseDatabase.getInstance().getReference("hosts/default/$sessionId")
-        ref.get()
-            .addOnSuccessListener { snapshot ->
-                val lista = snapshot.children.mapNotNull { it.getValue(String::class.java) }
-                onResult(lista)
-            }
-            .addOnFailureListener {
-                Log.e("PersistentHostManager", "❌ Error al obtener anfitriones", it)
-                onResult(emptyList())
-            }
+    fun obtenerAnfitriones(context: Context, onLoaded: (List<String>) -> Unit) {
+        val json = getPrefs(context).getString(KEY_HOSTS, "[]") ?: "[]"
+        val array = JSONArray(json)
+        val list = List(array.length()) { i -> array.getString(i) }
+        onLoaded(list)
+    }
+
+    fun guardarAnfitriones(context: Context, hosts: List<String>, onSaved: (() -> Unit)? = null) {
+        val json = JSONArray(hosts).toString()
+        getPrefs(context)
+            .edit()
+            .putString(KEY_HOSTS, json)
+            .apply()
+        onSaved?.invoke()
     }
 }

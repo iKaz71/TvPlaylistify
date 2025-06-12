@@ -1,44 +1,29 @@
 package com.kaz.tvplaylistify.ui.screens
 
+import android.graphics.Bitmap
 import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.firebase.database.*
+import com.google.firebase.database.FirebaseDatabase
 import com.kaz.tvplaylistify.R
-import com.kaz.tvplaylistify.model.UsuarioConectado
 import com.kaz.tvplaylistify.util.PersistentHostManager
-import androidx.compose.foundation.BorderStroke
-
-
-
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.auth.GoogleAuthProvider
-import com.google.android.gms.auth.api.signin.GoogleSignIn
-import com.google.android.gms.auth.api.signin.GoogleSignInOptions
-import com.google.android.gms.common.api.ApiException
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-
-import android.graphics.Bitmap
-import androidx.compose.foundation.border
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.text.style.TextAlign
 import net.glxn.qrgen.android.QRCode
-
-
 
 @Composable
 fun SessionScreen(sessionId: String) {
@@ -46,16 +31,16 @@ fun SessionScreen(sessionId: String) {
     var sessionCode by remember { mutableStateOf("----") }
     val persistentHosts = remember { mutableStateListOf<String>() }
 
-    // Cargar código y anfitriones persistentes
+    // Cargar código y anfitriones persistentes (solo local)
     LaunchedEffect(sessionId) {
         val ref = FirebaseDatabase.getInstance().getReference("sessions/$sessionId/code")
         ref.get().addOnSuccessListener { snapshot ->
             sessionCode = snapshot.getValue(String::class.java) ?: "----"
         }
-        PersistentHostManager.obtenerAnfitriones(sessionId) { list ->
-            persistentHosts.clear()
-            persistentHosts.addAll(list)
-        }
+        // Cargar anfitriones persistentes del almacenamiento local
+        val hosts = PersistentHostManager.obtenerAnfitriones(context)
+        persistentHosts.clear()
+        persistentHosts.addAll(hosts)
     }
 
     Surface(
@@ -72,7 +57,7 @@ fun SessionScreen(sessionId: String) {
             verticalAlignment = Alignment.CenterVertically
         ) {
 
-
+            // --- Panel izquierdo: datos de sala y anfitriones ---
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -156,6 +141,7 @@ fun SessionScreen(sessionId: String) {
                 }
             }
 
+            // --- Panel derecho: QR code ---
             Column(
                 modifier = Modifier.weight(1f),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -185,8 +171,6 @@ fun SessionScreen(sessionId: String) {
                     )
                 }
             }
-
-
         }
     }
 }
