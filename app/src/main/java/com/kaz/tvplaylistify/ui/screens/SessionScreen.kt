@@ -1,8 +1,6 @@
 package com.kaz.tvplaylistify.ui.screens
 
 import android.graphics.Bitmap
-import android.os.Build
-import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,27 +13,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.google.firebase.database.FirebaseDatabase
 import com.kaz.tvplaylistify.R
-import com.kaz.tvplaylistify.util.PersistentHostManager
 import net.glxn.qrgen.android.QRCode
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Refresh
-import androidx.lifecycle.viewmodel.compose.viewModel
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
-import com.google.firebase.database.ValueEventListener
-import com.kaz.tvplaylistify.util.SessionManager
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.Dispatchers
 
 
 
@@ -52,7 +36,7 @@ fun SessionScreen(sessionId: String) {
             sessionCode = snapshot.getValue(String::class.java) ?: "----"
         }
 
-        // Escuchamos anfitriones persistentes
+        // Escuchamos admin
         val usuariosRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("sessions/$sessionId/usuarios")
         usuariosRef.addValueEventListener(object : com.google.firebase.database.ValueEventListener {
             override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
@@ -62,7 +46,7 @@ fun SessionScreen(sessionId: String) {
                     val nombre = userSnap.child("nombre").getValue(String::class.java)
                         ?: userSnap.key.orEmpty()
                     val uid = userSnap.key.orEmpty()
-                    if (rol == "anfitrion_persistente") {
+                    if (rol == "admin") {
                         hosts.add(nombre to uid)
                     }
                 }
@@ -117,7 +101,7 @@ fun SessionScreen(sessionId: String) {
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Text(
-                    text = "⭐ Anfitriones persistentes:",
+                    text = "⭐ Administradores:",
                     color = Color.White,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold
@@ -153,7 +137,7 @@ fun SessionScreen(sessionId: String) {
                             ) {
                                 Icon(
                                     painter = painterResource(id = R.drawable.ic_remove),
-                                    contentDescription = "Eliminar anfitrión persistente",
+                                    contentDescription = "Eliminar admin",
                                     tint = Color.Red,
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -170,7 +154,7 @@ fun SessionScreen(sessionId: String) {
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(
-                    text = "Escanea este código desde la app móvil para convertirte en anfitrión persistente",
+                    text = "Escanea este código desde la app móvil para convertirte en admin",
                     color = Color.White,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold,
@@ -197,7 +181,7 @@ fun SessionScreen(sessionId: String) {
     }
 }
 
-// Funcion para quitar rol "anfitrion_persistente" en Firebase y dejar el usuario solo como "anfitrion"
+// Funcion para quitar rol "admin" en Firebase y dejar el usuario solo como "anfitrion"
 fun quitarRolAnfitrionPersistente(sessionId: String, uid: String) {
     val usuariosRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("sessions/$sessionId/usuarios")
     usuariosRef.child(uid).child("rol").setValue("anfitrion")
