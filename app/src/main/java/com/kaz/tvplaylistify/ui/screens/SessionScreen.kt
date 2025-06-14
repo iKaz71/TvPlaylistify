@@ -1,6 +1,7 @@
 package com.kaz.tvplaylistify.ui.screens
 
 import android.graphics.Bitmap
+import android.os.Build
 import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -25,27 +26,52 @@ import com.kaz.tvplaylistify.R
 import com.kaz.tvplaylistify.util.PersistentHostManager
 import net.glxn.qrgen.android.QRCode
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.google.firebase.database.DataSnapshot
+import com.google.firebase.database.DatabaseError
+import com.google.firebase.database.ValueEventListener
+import com.kaz.tvplaylistify.util.SessionManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+
 
 
 @Composable
 fun SessionScreen(sessionId: String) {
-    val context = LocalContext.current
     var sessionCode by remember { mutableStateOf("----") }
-    val persistentHosts = remember { mutableStateListOf<String>() }
+    val persistentHosts = remember { mutableStateListOf<Pair<String, String>>() } // (nombre, uid)
 
-    // Cargar código y anfitriones persistentes (solo local)
+    // Escuchamos cambios en usuarios de la sesión en Firebase
     LaunchedEffect(sessionId) {
-        val ref = FirebaseDatabase.getInstance().getReference("sessions/$sessionId/code")
+        // Código de conexión
+        val ref = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("sessions/$sessionId/code")
         ref.get().addOnSuccessListener { snapshot ->
             sessionCode = snapshot.getValue(String::class.java) ?: "----"
         }
-        // Uso correcto del callback:
-        PersistentHostManager.obtenerAnfitriones(context) { hosts ->
-            persistentHosts.clear()
-            persistentHosts.addAll(hosts)
-        }
-    }
 
+        // Escuchamos anfitriones persistentes
+        val usuariosRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("sessions/$sessionId/usuarios")
+        usuariosRef.addValueEventListener(object : com.google.firebase.database.ValueEventListener {
+            override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
+                val hosts = mutableListOf<Pair<String, String>>() // (nombre, uid)
+                snapshot.children.forEach { userSnap ->
+                    val rol = userSnap.child("rol").getValue(String::class.java) ?: ""
+                    val nombre = userSnap.child("nombre").getValue(String::class.java)
+                        ?: userSnap.key.orEmpty()
+                    val uid = userSnap.key.orEmpty()
+                    if (rol == "anfitrion_persistente") {
+                        hosts.add(nombre to uid)
+                    }
+                }
+                persistentHosts.clear()
+                persistentHosts.addAll(hosts)
+            }
+            override fun onCancelled(error: com.google.firebase.database.DatabaseError) { }
+        })
+    }
 
     Surface(
         modifier = Modifier
@@ -60,7 +86,6 @@ fun SessionScreen(sessionId: String) {
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-
             // --- Panel izquierdo: datos de sala y anfitriones ---
             Column(
                 modifier = Modifier
@@ -83,7 +108,12 @@ fun SessionScreen(sessionId: String) {
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("Código de conexión", color = Color.Gray, fontSize = 14.sp)
-                Text(sessionCode, color = Color.White, fontSize = 38.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    sessionCode,
+                    color = Color.White,
+                    fontSize = 38.sp,
+                    fontWeight = FontWeight.Bold
+                )
                 Spacer(modifier = Modifier.height(20.dp))
 
                 Text(
@@ -102,7 +132,7 @@ fun SessionScreen(sessionId: String) {
                 if (persistentHosts.isEmpty()) {
                     Text("• (Vacío)", color = Color.Gray, fontSize = 16.sp)
                 } else {
-                    persistentHosts.forEach { host ->
+                    persistentHosts.forEach { (hostName, hostUid) ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier.padding(vertical = 2.dp)
@@ -114,34 +144,22 @@ fun SessionScreen(sessionId: String) {
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(host, color = Color.White, fontSize = 16.sp)
+                            Text(hostName, color = Color.White, fontSize = 16.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            IconButton(
+                                onClick = {
+                                    quitarRolAnfitrionPersistente(sessionId, hostUid)
+                                }
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_remove),
+                                    contentDescription = "Eliminar anfitrión persistente",
+                                    tint = Color.Red,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                OutlinedButton(
-                    onClick = { /* Lógica para agregar anfitrión */ },
-                    border = BorderStroke(1.5.dp, Color(0xFFDDDFE2)),
-                    colors = ButtonDefaults.outlinedButtonColors(containerColor = Color.White),
-                    shape = RoundedCornerShape(32.dp),
-                    modifier = Modifier
-                        .height(46.dp)
-                        .width(240.dp)
-                ) {
-                    Icon(
-                        painter = painterResource(id = R.drawable.ic_google_logo),
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "Agregar anfitrión",
-                        color = Color(0xFF202124),
-                        fontWeight = FontWeight.Medium,
-                        fontSize = 16.sp
-                    )
                 }
             }
 
@@ -178,6 +196,15 @@ fun SessionScreen(sessionId: String) {
         }
     }
 }
+
+// Funcion para quitar rol "anfitrion_persistente" en Firebase y dejar el usuario solo como "anfitrion"
+fun quitarRolAnfitrionPersistente(sessionId: String, uid: String) {
+    val usuariosRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("sessions/$sessionId/usuarios")
+    usuariosRef.child(uid).child("rol").setValue("anfitrion")
+}
+
+
+
 
 // --- QR Section ---
 @Composable
