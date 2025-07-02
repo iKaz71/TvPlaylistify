@@ -1,0 +1,46 @@
+# IntelliJ & Android Studio
+*.iml
+.idea/
+.gradle/
+
+# Build outputs
+/build/
+*/build/
+.cxx/
+.externalNativeBuild/
+captures/
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Local configuration
+local.properties
+
+# Navigation Editor & Asset Wizard
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+
+# Workspace-related files (IDE state)
+.idea/workspace.xml
+.idea/modules.xml
+.idea/libraries/
+.idea/caches/
+
+# Firebase
+google-services.json
+firebase-debug.log
+
+# Keystore / sensitive data
+*.jks
+*.keystore
+*.pem
+*.key
+
+# Crashlytics and analytics
+crashlytics-build.properties
+
+# Fastlane (if used)
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
