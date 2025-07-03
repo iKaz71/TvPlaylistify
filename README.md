@@ -28,9 +28,13 @@ Ideal para bares, reuniones, fiestas y negocios donde la música se vuelve colab
 ## 📺 Especificaciones técnicas
 
 - **Plataforma recomendada:** Android TV con Android 9.0 o superior.
-- **Probado en simulador:** Android 12 S ARM (funcionamiento correcto, pero no probado en Google TV).
-- **Probado en físico:** Sterenbox con Android 9, funcionamiento perfecto.
-- **No probado en Google TV real:** No se garantiza funcionamiento en dispositivos Google TV (falta validación).
+- **Probado en simulador:**
+  - Android TV 12 S ARM – funcionamiento correcto.
+  - Android TV Android 14.0 "UpsideDownCake" – funcionamiento correcto.
+  - Google TV 16.0 "Baklava" – funcionamiento correcto.
+- **Probado en físico:** Sterenbox con Android 9 – funcionamiento perfecto.
+- **Probado en Google TV (emulador):** funcionamiento correcto.
+- **No probado en Google TV real:** Aunque la app funciona correctamente en el emulador de Google TV, aún falta validación en un dispositivo Google TV físico.
 - **Requisito clave:** Se recomienda tener la app de YouTube **actualizada** en el dispositivo.
 - **Para música sin interrupciones:** Es necesario utilizar una cuenta de **YouTube Premium** en el dispositivo para evitar anuncios. Sin Premium, la experiencia podría verse interrumpida por publicidad.
 - **Detalle importante:** Probar siempre en dispositivos reales para validar la conectividad y experiencia completa del ecosistema Playlistify aunque el simulador para el TV Funciono perfecto.
