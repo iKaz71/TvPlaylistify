@@ -10,6 +10,7 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
+import android.util.Log
 import android.view.*
 import android.widget.TextView
 import com.kaz.tvplaylistify.R
@@ -68,37 +69,48 @@ class OverlayService : Service() {
     }
 
     private fun showOverlay(roomCode: String) {
-        if (overlayView != null) {
-            updateCode(roomCode)
-            return
+        try {
+            if (overlayView != null) {
+                Log.d("OverlayService", "updateCode -> $roomCode")
+                updateCode(roomCode)
+                return
+            }
+
+            val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+            else
+                WindowManager.LayoutParams.TYPE_PHONE
+
+            params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                type,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                        WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                x = 24
+                y = 24
+            }
+
+            Log.d("OverlayService", "Inflating room_overlay_badge...")
+            overlayView = LayoutInflater.from(this)
+                .inflate(R.layout.room_overlay_badge, null, false)
+
+            val tv = overlayView!!.findViewById<TextView>(R.id.tv_room_code)
+            tv.text = roomCode
+
+            wm.addView(overlayView, params)
+            Log.d("OverlayService", "Overlay añadido correctamente con code=$roomCode")
+        } catch (t: Throwable) {
+            Log.e("OverlayService", "Fallo al mostrar overlay", t)
+            stopSelf()
         }
-
-        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        else
-            WindowManager.LayoutParams.TYPE_PHONE
-
-        params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            type,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = 24
-            y = 24
-        }
-
-        overlayView = LayoutInflater.from(this)
-            .inflate(R.layout.room_overlay_badge, null, false)
-        wm.addView(overlayView, params)
-
-        updateCode(roomCode)
     }
+
 
     private fun updateCode(roomCode: String) {
         val tv = overlayView?.findViewById<TextView>(R.id.tv_room_code)
