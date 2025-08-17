@@ -44,3 +44,6 @@ crashlytics-build.properties
 fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots
+
+# Local archives
+app/src.zip
