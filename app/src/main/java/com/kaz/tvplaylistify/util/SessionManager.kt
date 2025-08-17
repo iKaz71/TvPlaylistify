@@ -14,6 +14,17 @@ object SessionManager {
 
     private const val PREFS_NAME = "playlistify"
     private const val SESSION_ID_KEY = "sessionId"
+    private const val ROOM_CODE_KEY = "roomCode"
+
+    fun saveRoomCode(context: Context, code: String) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString(ROOM_CODE_KEY, code).apply()
+    }
+
+    fun getRoomCode(context: Context): String? {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return prefs.getString(ROOM_CODE_KEY, null)
+    }
 
     fun obtenerOcrearSesion(uid: String, context: Context, onResult: (sessionId: String) -> Unit) {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/overlay_root"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@drawable/bg_overlay_badge"
+    android:padding="10dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical">
+
+    <ImageView
+        android:id="@+id/img_logo"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:src="@drawable/logo_playlistify"
+        android:contentDescription="Playlistify" />
+
+    <Space
+        android:layout_width="10dp"
+        android:layout_height="0dp" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tv_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Sala"
+            android:textSize="12sp"
+            android:textColor="#BBBBBB" />
+
+        <TextView
+            android:id="@+id/tv_room_code"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="----"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#FFFFFF" />
+    </LinearLayout>
+
+</LinearLayout>

@@ -2,15 +2,18 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- Permisos -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Opcional si usas un servicio de reproducción real -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
-    <uses-feature
-        android:name="android.hardware.touchscreen"
-        android:required="false" />
+    <!-- Solo TV (leanback). Si es exclusivamente TV, puedes poner required="true" -->
     <uses-feature
         android:name="android.software.leanback"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.touchscreen"
         android:required="false" />
 
     <application
@@ -36,12 +39,24 @@
             android:theme="@style/Theme.TvPlaylistify"
             android:exported="false" />
 
+        <!-- Servicio existente de reproducción -->
         <service
             android:name=".service.VideoPlaybackService"
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
-        <receiver android:name=".receiver.CastReceiver" android:exported="true">
+        <!-- ✅ NUEVO: Servicio de overlay correctamente declarado -->
+        <service
+            android:name=".service.OverlayService"
+            android:exported="false" />
+        <!-- TIP: Si de verdad lo quieres marcar como FGS con tipo, puedes usar:
+             android:foregroundServiceType="dataSync"
+             o dejarlo sin tipo (en Android 9 no es necesario).
+             "mediaProjection" no aplica a este overlay. -->
+
+        <receiver
+            android:name=".receiver.CastReceiver"
+            android:exported="true">
             <intent-filter>
                 <action android:name="com.kaz.tvplaylistify.LANZAR_VIDEO" />
             </intent-filter>

@@ -13,33 +13,64 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kaz.tvplaylistify.R
+import com.kaz.tvplaylistify.util.SessionManager
+import com.google.firebase.database.*
 import net.glxn.qrgen.android.QRCode
-
-
 
 @Composable
 fun SessionScreen(sessionId: String) {
     var sessionCode by remember { mutableStateOf("----") }
     val persistentHosts = remember { mutableStateListOf<Pair<String, String>>() } // (nombre, uid)
+    val context = LocalContext.current
 
-    // Escuchamos cambios en usuarios de la sesión en Firebase
+    // Refs de Firebase
+    val codeRef = remember(sessionId) {
+        FirebaseDatabase.getInstance().getReference("sessions/$sessionId/code")
+    }
+    val usuariosRef = remember(sessionId) {
+        FirebaseDatabase.getInstance().getReference("sessions/$sessionId/usuarios")
+    }
+
+    // Escucha inicial + en tiempo real del código de la sala
     LaunchedEffect(sessionId) {
-        // Código de conexión
-        val ref = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("sessions/$sessionId/code")
-        ref.get().addOnSuccessListener { snapshot ->
-            sessionCode = snapshot.getValue(String::class.java) ?: "----"
+        // Carga inicial
+        codeRef.get().addOnSuccessListener { snapshot ->
+            val code = snapshot.getValue(String::class.java) ?: "----"
+            sessionCode = code
+            // ✅ Persistimos para que el Overlay lo pueda leer
+            SessionManager.saveRoomCode(context, code)
         }
+    }
 
-        // Escuchamos admin
-        val usuariosRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("sessions/$sessionId/usuarios")
-        usuariosRef.addValueEventListener(object : com.google.firebase.database.ValueEventListener {
-            override fun onDataChange(snapshot: com.google.firebase.database.DataSnapshot) {
+    // Suscripción en tiempo real (por si cambia el código)
+    DisposableEffect(sessionId) {
+        val codeListener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
+                val code = snapshot.getValue(String::class.java) ?: "----"
+                sessionCode = code
+                // ✅ Persistimos cada actualización
+                SessionManager.saveRoomCode(context, code)
+            }
+            override fun onCancelled(error: DatabaseError) { /* no-op */ }
+        }
+        codeRef.addValueEventListener(codeListener)
+
+        onDispose {
+            codeRef.removeEventListener(codeListener)
+        }
+    }
+
+    // Escuchamos cambios en usuarios de la sesión (admins)
+    DisposableEffect(sessionId) {
+        val usuariosListener = object : ValueEventListener {
+            override fun onDataChange(snapshot: DataSnapshot) {
                 val hosts = mutableListOf<Pair<String, String>>() // (nombre, uid)
                 snapshot.children.forEach { userSnap ->
                     val rol = userSnap.child("rol").getValue(String::class.java) ?: ""
@@ -53,8 +84,13 @@ fun SessionScreen(sessionId: String) {
                 persistentHosts.clear()
                 persistentHosts.addAll(hosts)
             }
-            override fun onCancelled(error: com.google.firebase.database.DatabaseError) { }
-        })
+            override fun onCancelled(error: DatabaseError) { /* no-op */ }
+        }
+        usuariosRef.addValueEventListener(usuariosListener)
+
+        onDispose {
+            usuariosRef.removeEventListener(usuariosListener)
+        }
     }
 
     Surface(
@@ -70,7 +106,7 @@ fun SessionScreen(sessionId: String) {
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // --- Panel izquierdo: datos de sala y anfitriones ---
+            // --- Panel izquierdo: datos de sala y administradores ---
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -131,9 +167,7 @@ fun SessionScreen(sessionId: String) {
                             Text(hostName, color = Color.White, fontSize = 16.sp)
                             Spacer(modifier = Modifier.width(8.dp))
                             IconButton(
-                                onClick = {
-                                    quitarRolAnfitrionPersistente(sessionId, hostUid)
-                                }
+                                onClick = { quitarRolAnfitrionPersistente(sessionId, hostUid) }
                             ) {
                                 Icon(
                                     painter = painterResource(id = R.drawable.ic_remove),
@@ -183,12 +217,10 @@ fun SessionScreen(sessionId: String) {
 
 // Funcion para quitar rol "admin" en Firebase y dejar el usuario solo como "anfitrion"
 fun quitarRolAnfitrionPersistente(sessionId: String, uid: String) {
-    val usuariosRef = com.google.firebase.database.FirebaseDatabase.getInstance().getReference("sessions/$sessionId/usuarios")
+    val usuariosRef = FirebaseDatabase.getInstance()
+        .getReference("sessions/$sessionId/usuarios")
     usuariosRef.child(uid).child("rol").setValue("anfitrion")
 }
-
-
-
 
 // --- QR Section ---
 @Composable

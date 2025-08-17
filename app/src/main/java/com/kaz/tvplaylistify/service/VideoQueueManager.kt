@@ -1,3 +1,5 @@
+package com.kaz.tvplaylistify.service
+
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -9,6 +11,8 @@ import kotlinx.coroutines.*
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import com.google.firebase.database.*
+import com.kaz.tvplaylistify.util.OverlayController
+import com.kaz.tvplaylistify.util.SessionManager
 
 object VideoQueueManager {
 
@@ -36,7 +40,6 @@ object VideoQueueManager {
 
         queueListener?.let { queueRef?.removeEventListener(it) }
 
-
         queueRef = FirebaseDatabase.getInstance().getReference("queuesOrder/$sessionId")
         queueListener = object : ValueEventListener {
             override fun onDataChange(snapshot: DataSnapshot) {
@@ -48,7 +51,6 @@ object VideoQueueManager {
             }
         }
         queueRef?.addValueEventListener(queueListener!!)
-
 
         reproducirSiEsNecesario()
     }
@@ -66,36 +68,37 @@ object VideoQueueManager {
             try {
                 Log.d("VideoQueueManager", "Llamando a getOrderedQueueAndOrder(api, $sid)")
                 val (orderedSongs, orderList) = getOrderedQueueAndOrder(api, sid)
-                Log.d("VideoQueueManager", "Canciones ordenadas recibidas (${orderedSongs.size}):")
-                orderedSongs.forEachIndexed { idx, song ->
-                    Log.d("VideoQueueManager", "   [$idx] id=${song.id}, titulo=${song.titulo}, duration=${song.duration}")
-                }
+                Log.d("VideoQueueManager", "Canciones ordenadas recibidas (${orderedSongs.size})")
 
-                val nextSong = orderedSongs.firstOrNull() ?: run {
-                    Log.d("VideoQueueManager", "Cola vacía, no hay videos para reproducir")
+                val nextSong = orderedSongs.firstOrNull()
+                val pushKey = orderList.firstOrNull()
+
+                if (nextSong == null || pushKey == null) {
+                    Log.d("VideoQueueManager", "Cola vacía, no hay videos para reproducir (no apagamos overlay si ya estaba).")
                     return@launch
                 }
-
-                val pushKey = orderList.firstOrNull()
-                Log.d("VideoQueueManager", "Canción a reproducir: id=${nextSong.id}, titulo=${nextSong.titulo}, duration=${nextSong.duration}, pushKey=$pushKey")
 
                 val durationMs = parseDurationToMillis(nextSong.duration)
-                Log.d("VideoQueueManager", "Duración en milisegundos: $durationMs")
-
-                if (nextSong.id.isBlank() || durationMs <= 0 || pushKey == null) {
-                    Log.w("VideoQueueManager", "Video inválido detectado. Ignorando.")
+                if (nextSong.id.isBlank() || durationMs <= 0) {
+                    Log.w("VideoQueueManager", "Video inválido detectado. Ignorando (overlay permanece si ya estaba).")
                     return@launch
+                }
+
+                // ✅ Encendemos overlay al iniciar la PRIMERA reproducción (o lo mantenemos encendido)
+                val code = SessionManager.getRoomCode(ctx) ?: "----"
+                if (OverlayController.hasPermission(ctx)) {
+                    OverlayController.start(ctx, code)
+                } else {
+                    Log.w("VideoQueueManager", "No hay permiso de overlay (SYSTEM_ALERT_WINDOW).")
                 }
 
                 Log.d("VideoQueueManager", "▶ Reproduciendo video: ${nextSong.id}")
                 YouTubeLauncher.launchYoutube(ctx, nextSong.id)
 
-
                 updatePlaybackState(sid, nextSong)
-
                 reproduciendo = true
 
-                // *** Eliminamos la canción después del tiempo de reproducción ***
+                // Eliminar la canción luego de su duración
                 handler.postDelayed({
                     CoroutineScope(Dispatchers.Main).launch {
                         val eliminado = withContext(Dispatchers.IO) {
@@ -107,8 +110,9 @@ object VideoQueueManager {
                         reproducirSiEsNecesario()
                     }
                 }, durationMs + 1000L)
+
             } catch (e: Exception) {
-                Log.e("VideoQueueManager", "Error al obtener la cola ordenada", e)
+                Log.e("VideoQueueManager", "Error al obtener la cola ordenada (overlay se mantiene si ya estaba)", e)
             }
         }
     }
@@ -124,9 +128,12 @@ object VideoQueueManager {
             )
     }
 
-
-
-    private suspend fun eliminarCancionReproducida(api: ApiService, sessionId: String, pushKey: String, userId: String = "tv"): Boolean {
+    private suspend fun eliminarCancionReproducida(
+        api: ApiService,
+        sessionId: String,
+        pushKey: String,
+        userId: String = "tv"
+    ): Boolean {
         val params = mapOf(
             "sessionId" to sessionId,
             "pushKey" to pushKey,
@@ -148,41 +155,10 @@ object VideoQueueManager {
         }
     }
 
-
-
-    private suspend fun getOrderedQueue(api: ApiService, sessionId: String): List<Cancion> {
-        Log.d("VideoQueueManager", "getOrderedQueue() - solicitando getQueue y getQueueOrder")
-        val queueResponse = withContext(Dispatchers.IO) { api.getQueue(sessionId) }
-        val orderResponse = withContext(Dispatchers.IO) { api.getQueueOrder(sessionId) }
-
-        if (!queueResponse.isSuccessful) {
-            Log.e("VideoQueueManager", "getQueue falló: ${queueResponse.errorBody()?.string()}")
-        }
-        if (!orderResponse.isSuccessful) {
-            Log.e("VideoQueueManager", "getQueueOrder falló: ${orderResponse.errorBody()?.string()}")
-        }
-
-        val queueMap = queueResponse.body() ?: emptyMap<String, Cancion>()
-        Log.d("VideoQueueManager", "queueMap.size=${queueMap.size} (claves: ${queueMap.keys.joinToString()})")
-
-        val orderList = orderResponse.body() ?: emptyList<String>()
-        Log.d("VideoQueueManager", "OrderList.size=${orderList.size} (orden: ${orderList.joinToString()})")
-
-        val cancionesOrdenadas = orderList.mapNotNull {
-            val song = queueMap[it]
-            if (song == null) {
-                Log.w("VideoQueueManager", "No se encontró canción para key=$it en queueMap")
-            }
-            song
-        }
-        Log.d("VideoQueueManager", "cancionesOrdenadas.size=${cancionesOrdenadas.size}")
-        return cancionesOrdenadas
-    }
     private suspend fun getOrderedQueueAndOrder(
         api: ApiService,
         sessionId: String
     ): Pair<List<Cancion>, List<String>> {
-        Log.d("VideoQueueManager", "getOrderedQueue() - solicitando getQueue y getQueueOrder")
         val queueResponse = withContext(Dispatchers.IO) { api.getQueue(sessionId) }
         val orderResponse = withContext(Dispatchers.IO) { api.getQueueOrder(sessionId) }
 
@@ -193,7 +169,6 @@ object VideoQueueManager {
         return Pair(cancionesOrdenadas, orderList)
     }
 
-
     private fun parseDurationToMillis(iso: String): Long {
         val regex = Regex("""PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?""")
         val match = regex.find(iso) ?: return 0L
@@ -201,5 +176,10 @@ object VideoQueueManager {
         val m = match.groupValues[2].toIntOrNull() ?: 0
         val s = match.groupValues[3].toIntOrNull() ?: 0
         return ((h * 3600 + m * 60 + s) * 1000).toLong()
+    }
+
+    /** Llamar explícitamente cuando cierres la sala/sesión desde UI */
+    fun apagarOverlayAlCerrarSesion() {
+        context?.let { OverlayController.stop(it) }
     }
 }

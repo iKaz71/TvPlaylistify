@@ -16,7 +16,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import com.kaz.tvplaylistify.service.OverlayService
 import com.kaz.tvplaylistify.service.VideoPlaybackService
 import com.kaz.tvplaylistify.ui.screens.SessionScreen
 import com.kaz.tvplaylistify.ui.theme.TVPlaylistifyTheme
@@ -27,20 +26,26 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Solo solicitamos permiso de overlay. NO iniciamos el servicio aquí.
         val overlayLauncher = registerForActivityResult(
             ActivityResultContracts.StartActivityForResult()
         ) {
+            // Si conceden el permiso, no hacemos nada más aquí.
+            // El overlay se encenderá cuando inicie la reproducción (VideoQueueManager).
             if (Settings.canDrawOverlays(this)) {
-                startService(Intent(this, OverlayService::class.java))
+                Log.d("MainActivity", "Permiso de overlay concedido.")
+            } else {
+                Log.w("MainActivity", "Permiso de overlay denegado.")
             }
         }
 
         if (!Settings.canDrawOverlays(this)) {
             overlayLauncher.launch(
-                Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
+                Intent(
+                    Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:$packageName")
+                )
             )
-        } else {
-            startService(Intent(this, OverlayService::class.java))
         }
 
         setContent {
@@ -48,14 +53,16 @@ class MainActivity : ComponentActivity() {
                 var sessionId by remember { mutableStateOf<String?>(null) }
 
                 LaunchedEffect(Unit) {
+                    // Identificador de la TV (si quieres, luego migramos a ANDROID_ID)
                     val uidTV = "tv-${Build.SERIAL ?: "default"}"
+
                     SessionManager.obtenerOcrearSesion(uidTV, this@MainActivity) { id ->
                         sessionId = id
-                        Log.d("MainActivity", "🎬 Sesión lista: $id")
+                        Log.d("MainActivity", "Sesión lista: $id")
 
-                        val svcIntent = Intent(this@MainActivity, VideoPlaybackService::class.java).apply {
-                            putExtra("EXTRA_SESSION_ID", id)
-                        }
+                        // Inicia tu servicio de reproducción/escucha de cola
+                        val svcIntent = Intent(this@MainActivity, VideoPlaybackService::class.java)
+                            .putExtra("EXTRA_SESSION_ID", id)
 
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                             startForegroundService(svcIntent)

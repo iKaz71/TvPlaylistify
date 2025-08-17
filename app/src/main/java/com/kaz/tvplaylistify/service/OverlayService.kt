@@ -1,58 +1,114 @@
 package com.kaz.tvplaylistify.service
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.graphics.PixelFormat
-import android.os.Handler
+import android.os.Build
 import android.os.IBinder
-import android.util.Log
+import android.provider.Settings
 import android.view.*
 import android.widget.TextView
 import com.kaz.tvplaylistify.R
 
 class OverlayService : Service() {
 
-    private lateinit var windowManager: WindowManager
-    private lateinit var overlayView: View
+    companion object {
+        const val EXTRA_ROOM_CODE = "EXTRA_ROOM_CODE"
+        const val ACTION_UPDATE_CODE = "ACTION_UPDATE_CODE"
+        private const val CHANNEL_ID = "room_overlay"
+        private const val NOTIF_ID = 42
+    }
+
+    private lateinit var wm: WindowManager
+    private var overlayView: View? = null
+    private var params: WindowManager.LayoutParams? = null
 
     override fun onCreate() {
         super.onCreate()
+        wm = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        startForeground(NOTIF_ID, buildNotification())
+    }
 
-        Log.d("OverlayService", "Overlay iniciado correctamente")
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (!Settings.canDrawOverlays(this)) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
-        windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
-        val inflater = LayoutInflater.from(this)
-        overlayView = inflater.inflate(R.layout.floating_overlay, null)
+        val action = intent?.action
+        val code = intent?.getStringExtra(EXTRA_ROOM_CODE) ?: "----"
 
-        val layoutParams = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
-                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-            else
-                WindowManager.LayoutParams.TYPE_PHONE,
+        if (action == ACTION_UPDATE_CODE) {
+            updateCode(code)
+        } else {
+            showOverlay(code)
+        }
+        return START_STICKY
+    }
+
+    private fun buildNotification(): Notification {
+        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        if (Build.VERSION.SDK_INT >= 26) {
+            val ch = NotificationChannel(
+                CHANNEL_ID,
+                "Overlay de sala",
+                NotificationManager.IMPORTANCE_MIN
+            )
+            nm.createNotificationChannel(ch)
+        }
+        return Notification.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_overlay)
+            .setContentTitle("Código de sala visible")
+            .setContentText("Mostrando logo y código sobre otras apps")
+            .build()
+    }
+
+    private fun showOverlay(roomCode: String) {
+        if (overlayView != null) {
+            updateCode(roomCode)
+            return
+        }
+
+        val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+        else
+            WindowManager.LayoutParams.TYPE_PHONE
+
+        params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            type,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                     WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT
-        )
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = 24
+            y = 24
+        }
 
-        val message = overlayView.findViewById<TextView>(R.id.overlay_message)
-        message.alpha = 1f  // Visibilidad forzada para prueba
+        overlayView = LayoutInflater.from(this)
+            .inflate(R.layout.room_overlay_badge, null, false)
+        wm.addView(overlayView, params)
 
-        windowManager.addView(overlayView, layoutParams)
+        updateCode(roomCode)
+    }
 
-        // Auto-destruye después de 2 segundos
-        Handler().postDelayed({
-            stopSelf()
-        }, 2000)
+    private fun updateCode(roomCode: String) {
+        val tv = overlayView?.findViewById<TextView>(R.id.tv_room_code)
+        tv?.text = roomCode
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        if (::overlayView.isInitialized) {
-            windowManager.removeView(overlayView)
-        }
+        overlayView?.let { runCatching { wm.removeView(it) } }
+        overlayView = null
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
