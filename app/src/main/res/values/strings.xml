@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">TvPlaylistify</string>
+    <string name="cd_logo">Logo de Playlistify</string>
+    <string name="cd_qr">Código QR para descargar Playlistify</string>
+    <string name="overlay_bottom_message">
+    Descarga Playlistify escaneando el QR y agrega tus canciones para escuchar en el Kahuna Bar
+    </string>
+
 </resources>

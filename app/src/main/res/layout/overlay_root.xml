@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/overlay_root_container"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- Badge arriba-izquierda -->
+    <include
+        android:id="@+id/include_badge"
+        layout="@layout/room_overlay_badge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="18dp" />
+
+    <!-- Franja inferior (se dibuja antes para quedar debajo del QR) -->
+    <LinearLayout
+        android:id="@+id/bottom_bar"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_gravity="bottom|start"
+        android:layout_marginEnd="176dp"
+        android:background="@drawable/overlay_bottom_bar_bg"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/tv_bottom_message"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Descarga Playlistify escaneando el QR y agrega tus canciones para escuchar en The Big Kahuna Bar • Pide tu rola favorita • Disponible en Android • Proximamente también en iOS"
+            android:textColor="@android:color/white"
+            android:textSize="18sp"
+            android:singleLine="true"
+            android:ellipsize="marquee"
+            android:marqueeRepeatLimit="marquee_forever"
+            android:fadingEdgeLength="16dp" />
+    </LinearLayout>
+
+    <!-- QR abajo-derecha (quedará por encima por estar después en el XML) -->
+    <ImageView
+        android:id="@+id/img_qr"
+        android:layout_width="130dp"
+        android:layout_height="130dp"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="16dp"
+        android:background="@drawable/overlay_qr_bg"
+        android:padding="10dp"
+        android:contentDescription="@string/cd_qr" />
+
+</FrameLayout>
